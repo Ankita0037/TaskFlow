@@ -4,25 +4,31 @@
 [![React](https://img.shields.io/badge/React-18+-blue.svg)](https://reactjs.org/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-6+-green.svg)](https://www.mongodb.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5+-blue.svg)](https://www.typescriptlang.org/)
+[![Socket.io](https://img.shields.io/badge/Socket.io-4+-black.svg)](https://socket.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A full-stack collaborative Task Management application built with React, Express.js, MongoDB, and real-time collaboration features using Socket.io.
 
-![Task Manager Screenshot](https://via.placeholder.com/800x400?text=Task+Manager+Dashboard)
+## 🌐 Live Demo
+
+- **Frontend**: [https://task-manager-frontend.vercel.app](https://task-manager-frontend.vercel.app)
+- **Backend API**: [https://task-manager-api.onrender.com](https://task-manager-api.onrender.com)
 
 ## 📑 Table of Contents
 
 - [Features](#-features)
 - [Tech Stack](#️-tech-stack)
-- [Architecture](#-architecture)
+- [Architecture & Design Decisions](#-architecture--design-decisions)
 - [Prerequisites](#-prerequisites)
 - [Getting Started](#-getting-started)
 - [Environment Variables](#️-environment-variables)
-- [API Documentation](#-api-documentation)
-- [Socket.io Events](#-socketio-events)
+- [API Contract Documentation](#-api-contract-documentation)
+- [Real-Time Socket.io Integration](#-real-time-socketio-integration)
 - [Testing](#-testing)
+- [Deployment](#-deployment)
 - [Docker Support](#-docker-support)
 - [Database Schema](#-database-schema)
+- [Trade-offs & Assumptions](#-trade-offs--assumptions)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -43,45 +49,61 @@ A full-stack collaborative Task Management application built with React, Express
 - **Form Validation**: Client and server-side validation using Zod schemas
 - **Optimistic Updates**: Smooth UX with SWR's optimistic update patterns
 
-## 🏗️ Architecture
+## 🏗️ Architecture & Design Decisions
 
-### Backend (Express.js + TypeScript)
+### Why MongoDB?
+We chose **MongoDB** over PostgreSQL for this project because:
+1. **Flexible Schema**: Tasks can have varying additional metadata without schema migrations
+2. **Document Model**: Natural fit for task objects with nested data (audit logs, notifications)
+3. **Scalability**: Horizontal scaling for real-time collaborative applications
+4. **MongoDB Atlas**: Easy cloud deployment with built-in monitoring and backups
+
+### Backend Architecture (Service/Repository Pattern)
 ```
 backend/
 ├── prisma/
-│   └── schema.prisma      # MongoDB schema definitions
+│   └── schema.prisma      # MongoDB schema definitions with Prisma ORM
 ├── src/
-│   ├── config/            # Configuration files
-│   ├── controllers/       # HTTP request handlers
+│   ├── config/            # Configuration & database connection
+│   ├── controllers/       # HTTP request handlers (thin layer)
 │   ├── dtos/              # Data Transfer Objects with Zod validation
-│   ├── middleware/        # Auth, validation, error handling
-│   ├── repositories/      # Database access layer
+│   ├── middleware/        # Auth, validation, error handling middleware
+│   ├── repositories/      # Database access layer (data persistence)
 │   ├── routes/            # API route definitions
-│   ├── services/          # Business logic layer
-│   ├── socket/            # Socket.io event handlers
+│   ├── services/          # Business logic layer (core application logic)
+│   ├── socket/            # Socket.io event handlers & real-time logic
 │   ├── types/             # TypeScript type definitions
 │   └── index.ts           # Application entry point
-└── __tests__/             # Unit tests
+└── __tests__/             # Unit tests (Jest)
 ```
 
-### Frontend (React + TypeScript)
+**Key Design Principles:**
+- **Controllers**: Handle HTTP requests/responses, delegate to services
+- **Services**: Contain business logic, orchestrate repositories
+- **Repositories**: Abstract database operations, single responsibility
+- **DTOs**: Validate and transform input data using Zod schemas
+
+### Frontend Architecture (Feature-Based)
 ```
 frontend/
-├── public/
 ├── src/
 │   ├── components/        # Reusable UI components
-│   │   ├── layout/        # Header, Layout components
-│   │   ├── tasks/         # Task-specific components
-│   │   └── ui/            # Generic UI components
-│   ├── contexts/          # React contexts (Auth, Socket)
-│   ├── hooks/             # Custom React hooks (SWR-based)
-│   ├── lib/               # API clients, utilities
-│   ├── pages/             # Page components
-│   ├── types/             # TypeScript definitions
-│   ├── App.tsx            # Main app with routing
-│   └── main.tsx           # Entry point
+│   │   ├── layout/        # Header, Layout, navigation
+│   │   ├── tasks/         # Task-specific components (TaskCard, TaskForm, TaskFilters)
+│   │   └── ui/            # Generic UI primitives (Button, Input, Modal, Skeleton)
+│   ├── contexts/          # React contexts (AuthContext, SocketContext)
+│   ├── hooks/             # Custom SWR hooks (useTasks, useNotifications)
+│   ├── lib/               # API client, utilities
+│   ├── pages/             # Page components (Dashboard, Tasks, Profile)
+│   └── types/             # TypeScript interfaces
 └── index.html
 ```
+
+### JWT Authentication Implementation
+- **Token Storage**: JWT stored in HttpOnly cookies (prevents XSS attacks)
+- **Token Expiry**: Configurable via `JWT_EXPIRES_IN` (default: 7 days)
+- **Password Hashing**: bcrypt with 12 salt rounds
+- **Authorization**: Middleware validates token on protected routes
 
 ## 🛠️ Tech Stack
 
@@ -177,11 +199,61 @@ JWT_EXPIRES_IN=7d
 FRONTEND_URL=http://localhost:5173
 ```
 
-## 📚 API Documentation
+## 📚 API Contract Documentation
 
-### Authentication
+### Base URL
+- **Local**: `http://localhost:5000/api/v1`
+- **Production**: `https://your-backend.onrender.com/api/v1`
 
-#### Register
+### Authentication Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `POST` | `/auth/register` | Register new user | No |
+| `POST` | `/auth/login` | Login user | No |
+| `POST` | `/auth/logout` | Logout user | Yes |
+| `GET` | `/auth/me` | Get current user profile | Yes |
+| `PUT` | `/auth/me` | Update user profile | Yes |
+| `PUT` | `/auth/password` | Change password | Yes |
+| `GET` | `/auth/users` | Get all users (for assignment) | Yes |
+
+### Task Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `GET` | `/tasks` | Get all tasks (with filters) | Yes |
+| `GET` | `/tasks/:id` | Get single task | Yes |
+| `POST` | `/tasks` | Create new task | Yes |
+| `PUT` | `/tasks/:id` | Update task | Yes |
+| `DELETE` | `/tasks/:id` | Delete task | Yes |
+| `GET` | `/tasks/dashboard` | Get dashboard statistics | Yes |
+
+### Task Query Parameters
+```
+?status=TODO|IN_PROGRESS|REVIEW|COMPLETED
+&priority=LOW|MEDIUM|HIGH|URGENT
+&assigneeId=<user-id>
+&creatorId=<user-id>
+&dueDateFrom=2024-01-01
+&dueDateTo=2024-12-31
+&page=1
+&limit=10
+&sortBy=createdAt|dueDate|priority|status
+&sortOrder=asc|desc
+```
+
+### Notification Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `GET` | `/notifications` | Get user notifications | Yes |
+| `GET` | `/notifications/count` | Get unread count | Yes |
+| `PATCH` | `/notifications/:id/read` | Mark as read | Yes |
+| `PATCH` | `/notifications/read-all` | Mark all as read | Yes |
+
+### Request/Response Examples
+
+#### Register User
 ```http
 POST /api/v1/auth/register
 Content-Type: application/json
@@ -193,47 +265,15 @@ Content-Type: application/json
 }
 ```
 
-#### Login
-```http
-POST /api/v1/auth/login
-Content-Type: application/json
-
+**Response (201 Created):**
+```json
 {
-  "email": "john@example.com",
-  "password": "password123"
+  "success": true,
+  "data": {
+    "user": { "id": "...", "name": "John Doe", "email": "john@example.com" },
+    "token": "eyJhbGciOiJIUzI1NiIs..."
+  }
 }
-```
-
-#### Get Current User
-```http
-GET /api/v1/auth/me
-Authorization: Bearer <token>
-```
-
-### Tasks
-
-#### Get All Tasks
-```http
-GET /api/v1/tasks
-Authorization: Bearer <token>
-
-# Query Parameters
-?status=IN_PROGRESS
-&priority=HIGH
-&assigneeId=<user-id>
-&creatorId=<user-id>
-&dueDateFrom=2024-01-01
-&dueDateTo=2024-12-31
-&page=1
-&limit=10
-&sortBy=createdAt
-&sortOrder=desc
-```
-
-#### Get Task by ID
-```http
-GET /api/v1/tasks/:id
-Authorization: Bearer <token>
 ```
 
 #### Create Task
@@ -248,63 +288,103 @@ Content-Type: application/json
   "priority": "HIGH",
   "status": "TODO",
   "dueDate": "2024-12-31T23:59:59.000Z",
-  "assigneeId": "<user-id>"
+  "assignedToId": "<user-id>"
 }
 ```
 
-#### Update Task
-```http
-PUT /api/v1/tasks/:id
-Authorization: Bearer <token>
-Content-Type: application/json
-
+**Response (201 Created):**
+```json
 {
-  "status": "IN_PROGRESS"
+  "success": true,
+  "data": {
+    "id": "...",
+    "title": "Complete project documentation",
+    "description": "Write comprehensive README and API docs",
+    "priority": "HIGH",
+    "status": "TODO",
+    "dueDate": "2024-12-31T23:59:59.000Z",
+    "creatorId": "...",
+    "assignedToId": "...",
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
 }
 ```
 
-#### Delete Task
-```http
-DELETE /api/v1/tasks/:id
-Authorization: Bearer <token>
+#### Error Response Format
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Validation failed",
+    "code": "VALIDATION_ERROR",
+    "details": [
+      { "field": "title", "message": "Title is required" }
+    ]
+  }
+}
 ```
 
-### Notifications
+### HTTP Status Codes
+| Code | Description |
+|------|-------------|
+| `200` | Success |
+| `201` | Created |
+| `400` | Bad Request (validation error) |
+| `401` | Unauthorized (invalid/missing token) |
+| `403` | Forbidden (insufficient permissions) |
+| `404` | Not Found |
+| `500` | Internal Server Error |
 
-#### Get All Notifications
-```http
-GET /api/v1/notifications
-Authorization: Bearer <token>
+## 🔌 Real-Time Socket.io Integration
+
+### How Socket.io Was Implemented
+
+The real-time functionality is built using Socket.io with the following architecture:
+
+#### Server-Side (Backend)
+```typescript
+// socket/index.ts
+- Authenticates socket connections using JWT tokens
+- Maintains user-to-socket mapping for targeted notifications
+- Broadcasts task events to all connected clients
+- Sends personal notifications to specific users
 ```
 
-#### Mark as Read
-```http
-PATCH /api/v1/notifications/:id/read
-Authorization: Bearer <token>
+#### Client-Side (Frontend)
+```typescript
+// contexts/SocketContext.tsx
+- Establishes authenticated WebSocket connection
+- Listens for real-time events (task:created, task:updated, task:deleted)
+- Dispatches custom DOM events to trigger SWR revalidation
+- Shows toast notifications for new notifications
 ```
 
-#### Mark All as Read
-```http
-PATCH /api/v1/notifications/read-all
-Authorization: Bearer <token>
-```
+### Socket Events
 
-## 🔌 Socket.io Events
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `connect` | Client → Server | Initial connection with JWT auth |
+| `task:created` | Server → All Clients | Broadcast when new task is created |
+| `task:updated` | Server → All Clients | Broadcast when task is updated |
+| `task:deleted` | Server → All Clients | Broadcast when task is deleted |
+| `notification:new` | Server → Specific User | Personal notification (e.g., task assignment) |
+| `join:task:{id}` | Client → Server | Subscribe to specific task updates |
+| `leave:task:{id}` | Client → Server | Unsubscribe from task updates |
 
-### Client Events (emit)
-- `join-user-room`: Join personal notification room
-- `join-task-room`: Join a specific task's room
-- `leave-task-room`: Leave a task's room
-
-### Server Events (listen)
-- `task-created`: New task created
-- `task-updated`: Task updated
-- `task-deleted`: Task deleted
-- `notification`: New notification received
+### Real-Time Flow Example
+1. User A updates a task's status
+2. Backend saves to database
+3. Backend emits `task:updated` via Socket.io
+4. All connected clients receive the event
+5. Frontend triggers SWR revalidation
+6. UI updates instantly without page refresh
 
 ## 🧪 Testing
 
 ### Backend Tests
+The project includes comprehensive unit tests for critical business logic:
+
 ```bash
 cd backend
 npm test
@@ -315,28 +395,121 @@ npm test
 npm test -- --coverage
 ```
 
-## 📦 Building for Production
+**Test Files:**
+- `src/__tests__/services/task.service.test.ts` - Task service business logic (9 tests)
+- `src/__tests__/dtos/validation.test.ts` - DTO validation tests
 
-### Backend
+**Test Coverage Areas:**
+- Task creation validation
+- Task update validation  
+- Priority/Status enum validation
+- Date validation
+- User authorization logic
+
+## 🚀 Deployment
+
+### Frontend Deployment (Vercel)
+
+1. **Connect Repository**
+   - Go to [vercel.com](https://vercel.com) and sign in
+   - Click "New Project" and import your GitHub repository
+   - Select the `frontend` folder as the root directory
+
+2. **Configure Build Settings**
+   - Framework Preset: Vite
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+
+3. **Set Environment Variables**
+   ```
+   VITE_API_URL=https://your-backend-url.onrender.com/api/v1
+   VITE_SOCKET_URL=https://your-backend-url.onrender.com
+   ```
+
+4. **Deploy**
+   - Click "Deploy" and wait for the build to complete
+
+### Backend Deployment (Render)
+
+1. **Connect Repository**
+   - Go to [render.com](https://render.com) and sign in
+   - Click "New +" → "Web Service"
+   - Connect your GitHub repository
+
+2. **Configure Service**
+   - Name: `task-manager-api`
+   - Root Directory: `backend`
+   - Environment: `Node`
+   - Build Command: `npm install && npm run build`
+   - Start Command: `npm start`
+
+3. **Set Environment Variables**
+   ```
+   NODE_ENV=production
+   PORT=5000
+   DATABASE_URL=mongodb+srv://...
+   JWT_SECRET=your-production-secret
+   JWT_EXPIRES_IN=7d
+   FRONTEND_URL=https://your-frontend.vercel.app
+   ```
+
+4. **Deploy**
+   - Click "Create Web Service"
+
+### Post-Deployment Checklist
+- [ ] Verify API health: `GET /api/v1/health`
+- [ ] Test user registration/login
+- [ ] Verify real-time updates work
+- [ ] Check CORS configuration
+- [ ] Test on mobile devices
+
+## 🐳 Docker Support
+
+### Quick Start with Docker Compose
 ```bash
-cd backend
-npm run build
-npm start
-```
-
-### Frontend
-```bash
-cd frontend
-npm run build
-# Output in dist/ folder
-```
-
-## 🐳 Docker Support (Optional)
-
-```bash
-# Build and run with Docker Compose
+# Build and run entire stack
 docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
 ```
+
+### Services Included
+- **MongoDB**: Database with replica set (required for Prisma)
+- **Backend**: Express.js API server
+- **Frontend**: Nginx serving React build
+
+## ⚖️ Trade-offs & Assumptions
+
+### Trade-offs Made
+
+1. **MongoDB over PostgreSQL**
+   - **Pro**: Flexible schema, easier cloud deployment, natural document model
+   - **Con**: No native transactions (mitigated by Prisma's transaction API)
+
+2. **SWR over React Query**
+   - **Pro**: Simpler API, smaller bundle size, stale-while-revalidate pattern
+   - **Con**: Less feature-rich than React Query
+
+3. **JWT in HttpOnly Cookies**
+   - **Pro**: Prevents XSS attacks, automatic inclusion in requests
+   - **Con**: Requires CORS configuration, can't access token in JS (by design)
+
+4. **Prisma over Mongoose**
+   - **Pro**: Type-safe queries, auto-generated client, familiar SQL-like syntax
+   - **Con**: Less flexible for complex MongoDB aggregations
+
+### Assumptions Made
+
+1. **Single Team/Workspace**: All users can see and be assigned any task
+2. **No File Attachments**: Tasks contain text-only content
+3. **English Only**: No internationalization implemented
+4. **No Task Comments**: Communication happens outside the app
+5. **No Recurring Tasks**: Each task is a one-time item
+6. **Browser Support**: Modern browsers only (ES2020+)
 
 ## 📁 Database Schema
 
