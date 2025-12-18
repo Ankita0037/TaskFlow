@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { User } from '@prisma/client';
 import { userRepository } from '../repositories';
 import { RegisterInput, LoginInput, UpdateProfileInput } from '../dtos';
@@ -185,9 +185,10 @@ export class AuthService {
       name: user.name,
     };
 
+    // Cast expiresIn to any to handle string values like '7d'
     return jwt.sign(payload, config.jwt.secret, {
       expiresIn: config.jwt.expiresIn,
-    });
+    } as jwt.SignOptions);
   }
 
   /**

@@ -165,7 +165,7 @@ export class SocketHandler {
   }
 }
 
-export let socketHandler: SocketHandler;
+let socketHandler: SocketHandler | null = null;
 
 /**
  * Initialize Socket.io with HTTP server
@@ -177,4 +177,12 @@ export function initializeSocket(httpServer: HttpServer): SocketHandler {
   return socketHandler;
 }
 
-export default socketHandler;
+/**
+ * Get the socket handler instance
+ * @returns SocketHandler instance or null if not initialized
+ */
+export function getSocketHandler(): SocketHandler | null {
+  return socketHandler;
+}
+
+export { socketHandler };
