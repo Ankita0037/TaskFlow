@@ -1,0 +1,104 @@
+// This is your Prisma schema file for MongoDB
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+/// User model for authentication and task assignment
+model User {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  email          String   @unique
+  password       String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  createdTasks   Task[]         @relation("TaskCreator")
+  assignedTasks  Task[]         @relation("TaskAssignee")
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+/// Priority levels for tasks
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+/// Status workflow for tasks
+enum Status {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+}
+
+/// Task model for the core task management functionality
+model Task {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  description  String
+  dueDate      DateTime
+  priority     Priority @default(MEDIUM)
+  status       Status   @default(TODO)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  creatorId    String   @db.ObjectId
+  creator      User     @relation("TaskCreator", fields: [creatorId], references: [id])
+  
+  assignedToId String?  @db.ObjectId
+  assignedTo   User?    @relation("TaskAssignee", fields: [assignedToId], references: [id])
+
+  auditLogs    AuditLog[]
+
+  @@map("tasks")
+}
+
+/// Notification model for in-app notifications
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  message   String
+  type      String   @default("TASK_ASSIGNED")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  
+  taskId    String?  @db.ObjectId
+
+  @@map("notifications")
+}
+
+/// AuditLog model for tracking task changes (Bonus feature)
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  action      String
+  field       String?
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  taskId      String   @db.ObjectId
+  task        Task     @relation(fields: [taskId], references: [id])
+  
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
